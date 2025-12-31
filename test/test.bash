@@ -1,14 +1,40 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #SPDX-FileCopyrightText: 2025 Tatsunori Kanno
 #SPDX-License-Identifier: BSD-3-Clause
 
-dir=/home/tatsunori/ros2_ws/src/mypkg/test
-[ "$1" != "/home/tatsunori/ros2_ws/src/mypkg/test" ] && dir="$1"
+set -e
 
-cd $dir/ros2_ws
-colcon build
-source $dir/.bashrc
-timeout 10 ros2 launch mypkg talk_listen.launch.py > /tmp/mypkg.log
+echo "[TEST] topic_watchdog I/O test start"
 
-cat /tmp/mypkg.log |
-grep 'Listen: 10'
+# watchdog 起動
+ros2 run mypkg topic_watchdog \
+  --ros-args \
+  -p watch_topic:=/test_topic \
+  -p timeout_sec:=0.5 \
+  > /tmp/watchdog.log 2>&1 &
+
+WATCHDOG_PID=$!
+
+# WARN が来るまで最大10秒待つ
+STATUS=$(timeout 10 bash -c '
+  ros2 topic echo /watchdog/status 2>/dev/null |
+  grep "^data: WARN:"
+' || true)
+
+# 後始末
+kill ${WATCHDOG_PID} 2>/dev/null || true
+
+echo "[DEBUG] status message:"
+echo "${STATUS}"
+
+if [ -n "${STATUS}" ]; then
+  echo "[PASS] watchdog WARN detected"
+  exit 0
+else
+  echo "[FAIL] watchdog WARN not detected"
+  exit 1
+fi
+
+
+
+
