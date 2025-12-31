@@ -24,10 +24,11 @@ sleep 1
 # 1回だけ publish
 ros2 topic pub /test_topic std_msgs/msg/String "{data: test}" --once
 
-# WARN が来るまで最大10秒待つ
+# WARN が出るまで最大10秒待つ
 STATUS=$(timeout 10 bash -c '
-  ros2 topic echo /watchdog/status |
-  grep "^data: WARN:"
+  until grep "WARN: /test_topic timeout" /tmp/watchdog.log; do
+    sleep 0.1
+  done
 ' || true)
 
 # 後始末
