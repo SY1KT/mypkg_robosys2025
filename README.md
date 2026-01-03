@@ -1,16 +1,7 @@
 # robosys2025-ROS2-
 ロボットシステム学課題2　トピックの「沈黙」を検出するROS2パッケージ  
 指定したトピックが一定時間更新されなかったら警告を出します。
-## 実行方法
-```bash
-$ mkdir -p ~/ros2_ws/src
-$ cd ~/ros2_ws/src
-$ git clone https://github.com/SY1KT/robosys2025-ROS2-.git
-$ cd ~/ros2_ws
-$ colcon build --packages-select mypkg
-$ source install/setup.bash
- 
-```
+
 ## 入出力例
 ```bash
 $ ros2 run mypkg topic_watchdog
