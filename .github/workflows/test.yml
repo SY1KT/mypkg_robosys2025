@@ -1,14 +1,40 @@
 name: test
+
 on: push
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.7", "3.8", "3.9","3.10",]
-    steps:
-    - uses: actions/checkout@v3
+    runs-on: ubuntu-22.04
 
-    - name: All test
-      run: bash -xv  ./test/test.bash
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup locale
+        run: |
+          sudo apt update
+          sudo apt install -y locales
+          sudo locale-gen en_US en_US.UTF-8
+          sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+
+      - name: Install ROS2 Humble
+        run: |
+          sudo apt update
+          sudo apt install -y software-properties-common curl
+          sudo add-apt-repository universe
+          sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+            -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+            http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" \
+            | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+          sudo apt update
+          sudo apt install -y ros-humble-ros-base python3-colcon-common-extensions
+
+      - name: Build workspace
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon build
+
+      - name: Run tests
+        run: |
+          source /opt/ros/humble/setup.bash
+          bash -xv ./test/test.bash
