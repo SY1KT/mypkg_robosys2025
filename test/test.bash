@@ -2,48 +2,85 @@
 #SPDX-FileCopyrightText: 2025 Tatsunori Kanno
 #SPDX-License-Identifier: BSD-3-Clause
 
+#!/usr/bin/env bash
+
 set -e
 
-source /opt/ros/humble/setup.bash
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+WS_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
 
-source install/setup.bash
+PKG_NAME=mypkg
+NODE_NAME=talker
 
-echo "[TEST] topic_watchdog I/O test start"
+ERRORS=0
+NODE_PID=""
 
-# watchdog 起動
-ros2 run mypkg topic_watchdog \
-  --ros-args \
-  -p watch_topic:=/test_topic \
-  -p timeout_sec:=0.5 \
-  > /tmp/watchdog.log 2>&1 &
+cleanup () {
+  echo ""
+  echo "[INFO] Cleaning up..."
+  if [ -n "${NODE_PID}" ] && ps -p ${NODE_PID} > /dev/null 2>&1; then
+    kill ${NODE_PID}
+    wait ${NODE_PID} 2>/dev/null || true
+    echo "[INFO] Node stopped"
+  fi
+}
 
-WATCHDOG_PID=$!
+trap cleanup SIGINT SIGTERM EXIT
 
-sleep 1
+echo "=== ROS2 talker test start ==="
+echo "[INFO] Workspace root: ${WS_ROOT}"
 
-# 1回publish
-ros2 topic pub /test_topic std_msgs/msg/String "{data: test}" --once
+# ROS2 環境
+if ! command -v ros2 >/dev/null 2>&1; then
+  echo "[ERROR] ros2 command not found"
+  exit 1
+fi
 
-# WARN が出るまで最大10秒待つ
-STATUS=$(timeout 10 bash -c '
-  until grep "WARN: /test_topic timeout" /tmp/watchdog.log; do
-    sleep 0.1
-  done
-' || true)
+# setup.bash
+if [ ! -f "${WS_ROOT}/install/setup.bash" ]; then
+  echo "[ERROR] install/setup.bash not found in ${WS_ROOT}"
+  exit 1
+fi
 
-# 後始末
-kill ${WATCHDOG_PID} 2>/dev/null || true
+source "${WS_ROOT}/install/setup.bash"
 
-echo "[DEBUG] status message:"
-echo "${STATUS}"
+# ノード起動
+echo "[INFO] Starting node..."
+ros2 run ${PKG_NAME} ${NODE_NAME} &
+NODE_PID=$!
 
-if [ -n "${STATUS}" ]; then
-  echo "[PASS] watchdog WARN detected"
+sleep 2
+
+# 起動確認
+if ps -p ${NODE_PID} > /dev/null; then
+  echo "[INFO] Node running (PID=${NODE_PID})"
+else
+  echo "[ERROR] Node failed to start"
+  ERRORS=$((ERRORS+1))
+fi
+
+# topic 確認
+if ros2 topic list | grep -q "^/countup$"; then
+  echo "[INFO] Topic /countup OK"
+else
+  echo "[ERROR] Topic /countup not found"
+  ERRORS=$((ERRORS+1))
+fi
+
+# 実データ確認
+if ros2 topic echo /countup --once >/dev/null 2>&1; then
+  echo "[INFO] /countup publishing OK"
+else
+  echo "[ERROR] No message on /countup"
+  ERRORS=$((ERRORS+1))
+fi
+
+echo "=== TEST RESULT ==="
+if [ ${ERRORS} -eq 0 ]; then
+  echo "PASS"
   exit 0
 else
-  echo "[FAIL] watchdog WARN not detected"
-  echo "[DEBUG] watchdog log:"
-  cat /tmp/watchdog.log || true
-  exit 1
+  echo "FAIL (${ERRORS} errors)"
+  exit ${ERRORS}
 fi
 
